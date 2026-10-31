@@ -1,50 +1,64 @@
-import dotenv from "dotenv";
-dotenv.config();
+﻿import "dotenv/config";
 import express from "express";
-import { MongoClient, ObjectId } from "mongodb";
 import cors from "cors";
+import { MongoClient } from "mongodb";
+
+const uri = process.env.MONGODB_URI;
+const client = new MongoClient(uri);
 
 const app = express();
-const port = 5000;
 
-app.use(cors());
+// Explicitly allow PATCH, PUT, DELETE methods in CORS
+app.use(
+  cors({
+    origin: "*",
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  }),
+);
 app.use(express.json());
-
-const client = new MongoClient(process.env.MONGODB_URI);
-
-let db;
-let eventCollection;
+const port = 5000;
 
 export async function connectToMongoDB() {
   try {
     await client.connect();
     console.log("You successfully connected to MongoDB!");
-    db = client.db("HopeNest");
-    eventCollection = db.collection("data");
     return client;
   } catch (err) {
-    console.dir(err);
+    console.error("Failed to connect to MongoDB", err);
   }
 }
 
-export async function disconnectFromMongoDB() {
-  await client.close();
-}
-app.get("/", (req, res) => {
-  res.send("Server is running");
-});
+connectToMongoDB().catch(console.error);
 
-app.post("/events", async (req, res) => {
+app.post("/create-events", async (req, res) => {
   try {
-    const events = await eventCollection.find().toArray();
-    res.json(events);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.log("Received data:", req.body);
+
+    const db = client.db("HopeNest");
+    const collection = db.collection("data");
+
+    const result = await collection.insertOne(req.body);
+
+    res.status(201).json({
+      message: "Data saved successfully!",
+      insertedId: result.insertedId,
+    });
+  } catch (error) {
+    console.error("MongoDB insert error:", error);
+
+    res.status(500).json({
+      message: "Failed to save data",
+      error: error.message,
+    });
   }
 });
 
-await connectToMongoDB();
+app.get("/", (req, res) => {
+  res.send("Hello World!");
+});
 
 app.listen(port, () => {
-  console.log(`Server is running at ${port}`);
+  console.log(`Server initialized on port ${port}`);
 });
+export default app;
