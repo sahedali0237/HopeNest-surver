@@ -54,6 +54,24 @@ app.post("/create-events", async (req, res) => {
   }
 });
 
+app.get("/events", async (req, res) => {
+  try {
+    const db = client.db("HopeNest");
+    const collection = db.collection("data");
+
+    const events = await collection.find({}).toArray();
+
+    res.status(200).json(events);
+  } catch (error) {
+    console.error("MongoDB fetch error:", error);
+
+    res.status(500).json({
+      message: "Failed to fetch events",
+      error: error.message,
+    });
+  }
+});
+
 app.get("/", (req, res) => {
   res.send("Hello World!");
 });
