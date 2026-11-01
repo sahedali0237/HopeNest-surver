@@ -1,7 +1,8 @@
-﻿﻿import dotenv from "dotenv";
+﻿import dotenv from "dotenv";
 dotenv.config();
 import express from "express";
 import cors from "cors";
+import { createRemoteJWKSet, jwtVerify } from "jose";
 
 import { MongoClient, ObjectId } from "mongodb";
 
@@ -15,7 +16,7 @@ app.use(
   }),
 );
 app.use(express.json());
-const port = 5000;
+const port = process.env.PORT || 5000;
 
 const client = new MongoClient(process.env.MONGODB_URI);
 
@@ -31,7 +32,34 @@ export async function connectToMongoDB() {
 
 connectToMongoDB().catch(console.error);
 
-app.post("/create-events", async (req, res) => {
+const JWKS = createRemoteJWKSet(new URL(process.env.JWKS_URI));
+
+const verifyToken = async (req, res, next) => {
+  const authHeader = req.headers.authorization;
+
+  if (!authHeader) {
+    return res.status(401).send({ message: "Unauthorized access" });
+  }
+  const token = authHeader.split(" ")[1];
+  if (!token) {
+    return res.status(401).send({ message: "Unauthorized access" });
+  }
+
+  try {
+    const { payload } = await jwtVerify(token, JWKS, {
+      issuer: process.env.FRONTEND_URI,
+      audience: process.env.FRONTEND_URI,
+      algorithms: ["RS256"],
+    });
+    req.user = payload;
+  } catch (error) {
+    return res.status(401).send({ message: "Unauthorized access" });
+  }
+
+  next();
+};
+
+app.post("/create-events", verifyToken, async (req, res) => {
   try {
     console.log("Received data:", req.body);
 
@@ -87,7 +115,7 @@ app.get("/events/:id", async (req, res) => {
   }
 });
 
-app.patch("/events/:id", async (req, res) => {
+app.patch("/events/:id", verifyToken, async (req, res) => {
   try {
     const { id } = req.params;
     console.log("Incoming PATCH for ID:", id, "Payload:", req.body);
@@ -124,7 +152,7 @@ app.patch("/events/:id", async (req, res) => {
   }
 });
 
-app.delete("/events/:id", async (req, res) => {
+app.delete("/events/:id", verifyToken, async (req, res) => {
   try {
     const { id } = req.params;
     if (!ObjectId.isValid(id)) {
@@ -154,7 +182,7 @@ app.delete("/events/:id", async (req, res) => {
   }
 });
 
-app.delete("/events/:id/join", async (req, res) => {
+app.delete("/events/:id/join", verifyToken, async (req, res) => {
   try {
     const eventId = req.params.id;
     const userEmail = req.query.email || req.body?.email;
@@ -162,13 +190,16 @@ app.delete("/events/:id/join", async (req, res) => {
     if (!userEmail) {
       return res.status(400).json({ message: "User email is required" });
     }
-    const event = await Event.findByIdAndUpdate(
-      eventId,
-      { $pull: { joinedUsers: userEmail } },
-      { new: true },
-    );
+    const result = await client
+      .db("HopeNest")
+      .collection("data")
+      .updateOne(
+        { _id: new ObjectId(eventId) },
+        { $pull: { joinedUsers: userEmail } },
+        { new: true },
+      );
 
-    if (!event) {
+    if (result.matchedCount === 0) {
       return res.status(404).json({ message: "Event not found" });
     }
 
