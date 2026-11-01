@@ -3,7 +3,7 @@ dotenv.config();
 import express from "express";
 import cors from "cors";
 
-import { MongoClient } from "mongodb";
+import { MongoClient, ObjectId } from "mongodb";
 
 const app = express();
 
@@ -87,7 +87,7 @@ app.get("/events/:id", async (req, res) => {
   }
 });
 
-app.patch("/events/:id", requireAuth, async (req, res) => {
+app.patch("/events/:id", async (req, res) => {
   try {
     const { id } = req.params;
     console.log("Incoming PATCH for ID:", id, "Payload:", req.body);
@@ -119,6 +119,36 @@ app.patch("/events/:id", requireAuth, async (req, res) => {
     console.error("MongoDB update error:", error);
     res.status(500).json({
       message: "Failed to update event",
+      error: error.message,
+    });
+  }
+});
+
+app.delete("/events/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({ message: `Invalid Event ID: ${id}` });
+    }
+
+    const db = client.db("HopeNest");
+    const collection = db.collection("data");
+
+    const result = await collection.deleteOne({ _id: new ObjectId(id) });
+
+    if (result.deletedCount === 0) {
+      return res.status(404).json({ message: "Event not found" });
+    }
+
+    console.log("Successfully deleted document:", id);
+    res.json({
+      message: "Event deleted successfully",
+      result,
+    });
+  } catch (error) {
+    console.error("MongoDB delete error:", error);
+    res.status(500).json({
+      message: "Failed to delete event",
       error: error.message,
     });
   }
