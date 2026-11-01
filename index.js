@@ -1,4 +1,4 @@
-﻿import dotenv from "dotenv";
+﻿﻿import dotenv from "dotenv";
 dotenv.config();
 import express from "express";
 import cors from "cors";
@@ -17,7 +17,7 @@ app.use(
 app.use(express.json());
 const port = 5000;
 
-const client = new MongoClient(process.env.MONGODB_URI || "mongodb://127.0.0.1:27017");
+const client = new MongoClient(process.env.MONGODB_URI);
 
 export async function connectToMongoDB() {
   try {
@@ -62,7 +62,7 @@ app.get("/events", async (req, res) => {
   } catch (error) {
     console.error("MongoDB query error:", error);
     res.status(500).json({
-      message: "Failed to retrieve destinations",
+      message: "Failed to retrieve events",
       error: error.message,
     });
   }
@@ -75,8 +75,8 @@ app.get("/events/:id", async (req, res) => {
       return res.status(400).json({ message: "Invalid Event ID format" });
     }
     const result = await client
-      .db("yourDB")
-      .collection("events")
+      .db("HopeNest")
+      .collection("data")
       .findOne({ _id: new ObjectId(id) });
     if (!result) return res.status(404).json({ message: "Event not found" });
     res.json(result);
@@ -84,6 +84,43 @@ app.get("/events/:id", async (req, res) => {
     res
       .status(500)
       .json({ message: "Failed to retrieve event", error: error.message });
+  }
+});
+
+app.patch("/events/:id", requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    console.log("Incoming PATCH for ID:", id, "Payload:", req.body);
+
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({ message: `Invalid Event ID: ${id}` });
+    }
+
+    const { _id, ...updateData } = req.body;
+
+    const db = client.db("HopeNest");
+    const collection = db.collection("data");
+
+    const result = await collection.updateOne(
+      { _id: new ObjectId(id) },
+      { $set: updateData },
+    );
+
+    if (result.matchedCount === 0) {
+      return res.status(404).json({ message: "Event not found" });
+    }
+
+    console.log("Successfully updated document:", id);
+    res.json({
+      message: "Event updated successfully",
+      result,
+    });
+  } catch (error) {
+    console.error("MongoDB update error:", error);
+    res.status(500).json({
+      message: "Failed to update event",
+      error: error.message,
+    });
   }
 });
 
