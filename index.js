@@ -154,6 +154,31 @@ app.delete("/events/:id", async (req, res) => {
   }
 });
 
+app.delete("/events/:id/join", async (req, res) => {
+  try {
+    const eventId = req.params.id;
+    const userEmail = req.query.email || req.body?.email;
+
+    if (!userEmail) {
+      return res.status(400).json({ message: "User email is required" });
+    }
+    const event = await Event.findByIdAndUpdate(
+      eventId,
+      { $pull: { joinedUsers: userEmail } },
+      { new: true },
+    );
+
+    if (!event) {
+      return res.status(404).json({ message: "Event not found" });
+    }
+
+    return res.status(200).json({ message: "Removed from joined events" });
+  } catch (error) {
+    console.error("Delete joined event error:", error);
+    return res.status(500).json({ message: "Failed to remove joined event" });
+  }
+});
+
 app.get("/", (req, res) => {
   res.send("Hello World!");
 });
